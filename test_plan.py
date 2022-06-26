@@ -4,16 +4,6 @@ np.random.seed(0)
 import tensorrt as trt
 import pycuda.autoinit
 import pycuda.driver as cuda
-import json
-import base64
-import io
-
-class MyProfiler(trt.IProfiler):
-    def __init__(self):
-        super(MyProfiler, self).__init__()
-
-    def report_layer_time(self, layerName, ms):
-        print("Timing: %8.3fus -> %s"%(ms*1000,layerName))
 
 class HostDeviceMem(object):
     def __init__(self, host_mem, device_mem):
@@ -47,39 +37,28 @@ def allocate_buffers(engine):
     return inputs, outputs, bindings, stream
 
 def trt_inference():
-    engine_file = "./test.plan"
+    engine_file = "/target/decoder.plan"
     logger = trt.Logger(trt.Logger.WARNING)
+
+    dummy_input = np.random.rand(16, 256, 256)
+    np.save('input.npy', dummy_input)
 
     with trt.Runtime(logger) as trt_runtime:
         trt.init_libnvinfer_plugins(None, "")             
         with open(engine_file, 'rb') as f:
             engine_data = f.read()
-
-    with open("output.txt", "r") as read_file:
-        decodedArray = json.load(read_file)
-        json_file = decodedArray['lst'][0][1][0]['outputs']
-
-        def decode(array):
-
-            data = base64.b64decode(array.encode(), validate=True)
-            infile = io.BytesIO(data)
-            return np.load(infile, allow_pickle=False).astype(np.float32)
-
-        x = decode(json_file['646']['values']['array'])
-        mask = decode(json_file['613']['values']['array'])
-        pos_emb = decode(json_file['603']['values']['array'])            
         engine = trt_runtime.deserialize_cuda_engine(engine_data)
         inputs, outputs, bindings, stream = allocate_buffers(engine)
 
         with engine.create_execution_context() as context:
-            context.profiler = MyProfiler()
-            np.copyto(inputs[0].host, x.ravel())
-            np.copyto(inputs[1].host, mask.ravel())
-            np.copyto(inputs[2].host, pos_emb.ravel())
+            if len(inputs) == 1:
+                np.copyto(inputs[0].host, dummy_input.ravel())
+            else:   
+                for idx in range(len(inputs)):
+                    np.copyto(inputs[idx].host, dummy_input[idx].ravel())        
 
             for inp in inputs:
                 cuda.memcpy_htod_async(inp.device, inp.host, stream)
-            stream.synchronize()
             context.execute_async(batch_size=1, bindings=bindings, stream_handle=stream.handle)
             for out in outputs:
                 cuda.memcpy_dtoh_async(out.host, out.device, stream) 
@@ -89,5 +68,5 @@ def trt_inference():
             trt_output = [out.host for out in outputs]
             print(trt_output)
             np.save('ouput.npy', trt_output[0])
-ctypes.cdll.LoadLibrary("./mha/build/libMHAPlugin.so")
+ctypes.cdll.LoadLibrary("/target/wenet-TensorRT/LayerNormPlugin.so")
 trt_inference()

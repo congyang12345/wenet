@@ -4,7 +4,7 @@
 - 优化效果（精度和加速比）：相比于官方fp16模式，速度提升30%；精度相比于浮点模型，误差在1e-3范围。
 - 在Docker里面代码编译、运行步骤的完整说明
   - 拉去镜像：docker pull registry.cn-hangzhou.aliyuncs.com/trt2022/dev
-  - 运行镜像：docker run -it --name trt2022 registry.cn-hangzhou.aliyuncs.com/trt2022/dev
+  - 运行镜像：docker run -it --gpus=all --name trt2022 registry.cn-hangzhou.aliyuncs.com/trt2022/dev
   - 下载代码：git clone https://github.com/congyang12345/wenet.git
   - 准备运行：cd wenet
   - 运行代码：bash build.sh && python /workspace/testEncoderAndDecoder.py 
